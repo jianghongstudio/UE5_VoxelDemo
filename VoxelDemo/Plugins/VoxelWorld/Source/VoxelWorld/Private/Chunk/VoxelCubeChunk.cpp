@@ -44,6 +44,137 @@ bool FVoxelCube::LinkCubes(TSharedPtr<FVoxelCube> FirstCube, TSharedPtr<FVoxelCu
 	return true;
 }
 
+void FVoxelCubeChunk::MergeMesh()
+{
+	MeshData.Clear();	
+	for (int Axis = 0; Axis < 3; ++Axis)
+	{
+		const int Axis1 = (Axis + 1) % 3;
+		const int Axis2 = (Axis + 2) % 3;
+
+		const int MainAxisLimit = 32;
+		const int Axis1Limit = 32;
+		const int Axis2Limit = 32;
+
+		FIntVector AxisMask = FIntVector::ZeroValue;
+		AxisMask[Axis] = 1;
+
+		FIntVector DeltaAxis1 = FIntVector::ZeroValue;
+		FIntVector DeltaAxis2 = FIntVector::ZeroValue;
+
+		FIntVector ChunkItr = FIntVector::ZeroValue;
+
+		TArray<int> Mask;
+		Mask.SetNumZeroed(Axis1Limit * Axis2Limit);
+
+		for (ChunkItr[Axis] = -1; ChunkItr[Axis] < MainAxisLimit;)
+		{
+			// 计算每一块的Mask
+			int N = 0;
+			for (ChunkItr[Axis2] = 0; ChunkItr[Axis2] < Axis2Limit; ++ChunkItr[Axis2])
+			{
+				for (ChunkItr[Axis1] = 0; ChunkItr[Axis1] < Axis1Limit; ++ChunkItr[Axis1])
+				{
+					const int CurrentCubeIndex = GetCubeIndex(ChunkItr);
+					const int CompareCubeIndex = GetCubeIndex(ChunkItr + AxisMask);
+
+					TSharedPtr<FVoxelCube> CurrentCube = CurrentCubeIndex >= 0 ? Cubes[CurrentCubeIndex] : nullptr;
+					TSharedPtr<FVoxelCube> CompareCube = CompareCubeIndex >= 0 ? Cubes[CompareCubeIndex] : nullptr;
+
+					const bool CurrentCubeOpaque = CurrentCube.IsValid();
+					const bool CompareCubeOpaque = CompareCube.IsValid();
+
+					if (CurrentCubeOpaque == CompareCubeOpaque)
+					{
+						Mask[N++] = 0;
+					}
+					else if (CurrentCubeOpaque)
+					{
+						Mask[N++] = 1;
+					}
+					else
+					{
+						Mask[N++] = -1;
+					}
+				}
+			}
+
+			// 从左到右从上到下比较mask
+			ChunkItr[Axis]++;
+			N = 0;
+
+			for (int j = 0; j < Axis2Limit; ++j)
+			{
+				for (int i = 0; i < Axis1Limit;)
+				{
+					if (Mask[N] != 0)
+					{
+						const int CurrentMask = Mask[N];
+						ChunkItr[Axis1] = i;
+						ChunkItr[Axis2] = j;
+						int Width;
+						for (Width = 1; Width + i < Axis1Limit && CurrentMask == Mask[N + Width]; ++Width)
+						{
+						}
+
+						int Height;
+						bool Done = false;
+
+						for (Height = 1; Height + j < Axis2Limit; ++Height)
+						{
+							for (int k = 0; k < Width; ++k)
+							{
+								if (CurrentMask == Mask[N + k + Height * Axis1Limit])
+								{
+									continue;
+								}
+								Done = true;
+								break;
+							}
+
+							if (Done)
+							{
+								break;
+							}
+						}
+						DeltaAxis1[Axis1] = Width;
+						DeltaAxis2[Axis2] = Height;
+
+						const FIntVector CurrentCood = ChunkItr + CoordOffset;
+
+						CreateQuad(CurrentMask > 0, AxisMask, Height, Width
+							, CurrentCood
+							, CurrentCood + DeltaAxis1
+							, CurrentCood + DeltaAxis2
+							, CurrentCood + DeltaAxis1 + DeltaAxis2
+							, MeshData);
+
+						DeltaAxis1 = FIntVector::ZeroValue;
+						DeltaAxis2 = FIntVector::ZeroValue;
+
+						for (int l = 0; l < Height; ++l)
+						{
+							for (int k = 0; k < Width; ++k)
+							{
+								Mask[N + k + l * Axis1Limit] = 0;
+							}
+						}
+
+						i += Width;
+						N += Width;
+					}
+					else
+					{
+						i++;
+						N++;
+					}
+				}
+			}
+		}
+
+	}
+}
+
 int FVoxelCubeChunk::GetCubeIndex(const FIntVector LocalCoord) const
 {
 	static FBox BoundBox = FBox(FVector::ZeroVector, FVector(31, 31, 31));
@@ -104,8 +235,9 @@ bool FVoxelCubeChunk::AddCubeAt(const FIntVector LocalCoord)
 	}
 	
 	DirtyCubes.Add(LocalCoord);
-	AddCubeMeshAt(LocalCoord);
+	//AddCubeMeshAt(LocalCoord);
 	CubeNum++;
+	MergeMesh();
 	return true;
 }
 
@@ -125,16 +257,16 @@ void FVoxelCubeChunk::AddCubeMeshAt(const FIntVector LocalCoord)
 		DeltaAxis1[Axis1] = 1;
 		DeltaAxis2[Axis2] = 1;
 
-		CreateQuad(true, AxisMask, 1, 1, CurrentItr, CurrentItr + DeltaAxis1, CurrentItr + DeltaAxis2, CurrentItr + DeltaAxis1 + DeltaAxis2, MeshData);
+		CreateQuad(false, AxisMask, 1, 1, CurrentItr, CurrentItr + DeltaAxis1, CurrentItr + DeltaAxis2, CurrentItr + DeltaAxis1 + DeltaAxis2, MeshData);
 
 		CurrentItr[Axis] += 1;
-		CreateQuad(false, AxisMask, 1, 1, CurrentItr, CurrentItr + DeltaAxis1, CurrentItr + DeltaAxis2, CurrentItr + DeltaAxis1 + DeltaAxis2, MeshData);
+		CreateQuad(true, AxisMask, 1, 1, CurrentItr, CurrentItr + DeltaAxis1, CurrentItr + DeltaAxis2, CurrentItr + DeltaAxis1 + DeltaAxis2, MeshData);
 	}
 }
 
 void FVoxelCubeChunk::CreateQuad(const bool bObverse, const FIntVector AxisMask, const int Height, const int Width, const FIntVector V1, const FIntVector V2, const FIntVector V3, const FIntVector V4, FVoxelChunkMeshData& OutMeshData)
 {
-	const int NormalFlag = (bObverse ? -1 : 1);
+	const int NormalFlag = (bObverse ? 1 : -1);
 	const FVector Normal = FVector(AxisMask * NormalFlag);
 	const FColor Color = FColor::Red;
 	int VertexOffset = OutMeshData.Vertices.Num();
@@ -197,7 +329,9 @@ void FVoxelChunkMeshData::Clear()
 	UV0.Empty();
 }
 
-void FGreedyMeshTask::MergeMesh()
+
+/*
+void FVoxelCubeChunk::MergeMesh()
 {
 	MeshData.Clear();
 
@@ -231,8 +365,8 @@ void FGreedyMeshTask::MergeMesh()
 					const int CurrentCubeIndex = GetCubeIndex(ChunkItr);
 					const int CompareCubeIndex = GetCubeIndex(ChunkItr + AxisMask);
 
-					TSharedPtr<FVoxelCube> CurrentCube = CurrentCubeIndex >= 0 ? CubeData[CurrentCubeIndex] : nullptr;
-					TSharedPtr<FVoxelCube> CompareCube = CompareCubeIndex >= 0 ? CubeData[CompareCubeIndex] : nullptr;
+					TSharedPtr<FVoxelCube> CurrentCube = CurrentCubeIndex >= 0 ? Cubes[CurrentCubeIndex] : nullptr;
+					TSharedPtr<FVoxelCube> CompareCube = CompareCubeIndex >= 0 ? Cubes[CompareCubeIndex] : nullptr;
 
 					const bool CurrentCubeOpaque = CurrentCube.IsValid();
 					const bool CompareCubeOpaque = CompareCube.IsValid();
@@ -293,7 +427,7 @@ void FGreedyMeshTask::MergeMesh()
 						DeltaAxis1[Axis1] = Width;
 						DeltaAxis2[Axis2] = Height;
 
-						const FIntVector CurrentCoord = ChunkItr + Offset;
+						const FIntVector CurrentCoord = ChunkItr + CoordOffset;
 						FVoxelCubeChunk::CreateQuad(CurrentMask > 0, AxisMask, Height, Width
 							, CurrentCoord
 							, CurrentCoord + DeltaAxis1
@@ -322,8 +456,9 @@ void FGreedyMeshTask::MergeMesh()
 			}
 		}
 	}
-}
+}*/
 
+/*
 int FGreedyMeshTask::GetCubeIndex(const FIntVector LocalCoord) const
 {
 	static FBox BoundBox = FBox(FVector::ZeroVector, FVector(31, 31, 31));
@@ -333,4 +468,4 @@ int FGreedyMeshTask::GetCubeIndex(const FIntVector LocalCoord) const
 	}
 
 	return -1;
-}
+}*/

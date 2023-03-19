@@ -51,7 +51,7 @@ void AVoxelGrid::ApplyMesh()
 			TArray<FProcMeshTangent>(),
 			true
 		);
-		Mesh->AddCollisionConvexMesh(Chunk.MeshData.Vertices);
+		Mesh->SetCollisionConvexMeshes({ Chunk.MeshData.Vertices });
 
 		SectionNum++;
 	}
@@ -108,8 +108,7 @@ void AVoxelGrid::MergeMesh()
 			TArray<FProcMeshTangent>(),
 			true
 		);
-		Mesh->AddCollisionConvexMesh(Chunk.MeshData.Vertices);
-
+		Mesh->SetCollisionConvexMeshes({ Chunk.MeshData.Vertices });
 		SectionNum++;
 	}
 }

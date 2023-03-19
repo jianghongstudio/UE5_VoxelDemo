@@ -51,6 +51,7 @@ public:
 	void Clear();
 };
 
+/*
 struct FGreedyMeshTask : public FNonAbandonableTask
 {
 public:
@@ -83,7 +84,7 @@ private:
 	const TArray<TSharedPtr<FVoxelCube>> CubeData;
 
 	FVoxelChunkMeshData MeshData;
-};
+};*/
 
 USTRUCT()
 struct FVoxelCubeChunk
@@ -103,9 +104,8 @@ struct FVoxelCubeChunk
 
 	friend class AVoxelGrid;
 
-	typedef FAsyncTask<FGreedyMeshTask> FMergeTask;
-
 public:
+	void MergeMesh();
 	int GetCubeIndex(const FIntVector LocalCoord) const;
 	static void CreateQuad(const bool bObverse, const FIntVector AxisMask, const int Height, const int Width
 		, const FIntVector V1, const FIntVector V2, const FIntVector V3, const FIntVector V4, FVoxelChunkMeshData& OutMeshData);
@@ -113,9 +113,6 @@ private:
 	bool AddCubeAt(const FIntVector LocalCoord);
 	void AddCubeMeshAt(const FIntVector LocalCoord);
 private:
-
-	TUniquePtr<FMergeTask> RunningTask;
-	TUniquePtr<FMergeTask> PendingTask;
 
 	FIntVector CoordOffset;
 	TArray<TSharedPtr<FVoxelCube>> Cubes;
